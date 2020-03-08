@@ -1,9 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.linalg as lin
-
-
-# from matplotlib2tikz import save as tikz_save
+from tikzplotlib import save as tikz_save
 
 class KalmanFilter:
     def __init__(self, A: np.ndarray, G: np.ndarray, C: np.ndarray, Q: np.ndarray, R: np.ndarray, x_0=None, P_0=None,
@@ -109,14 +107,14 @@ class KalmanFilter:
 
 
 if __name__ == '__main__':
-    # save_figures_tikz = False
+    save_figures_tikz = False
     Ts = 0.1
     n_samples = 100
     # ubrzanje
     a = np.zeros(n_samples)
     a[:30] = 2
     a[30:60] = -3
-    # stvarna brzina i pozicija
+    # brzina i pozicija
     v = np.zeros(n_samples)
     p = np.zeros(n_samples)
     for t in np.arange(1, n_samples):
@@ -140,10 +138,10 @@ if __name__ == '__main__':
     plt.plot(t, data, label='$z$')
     plt.xlabel('vrijeme ($sec$)')
     plt.legend()
-    # if save_figures_tikz:
-    #     tikz_save('figures\stanjaIMjerenja.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\stanjaIMjerenja.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
 
     # Kalman
     # x = [p v a]
@@ -165,7 +163,7 @@ if __name__ == '__main__':
     X = np.array(kf.Xcor_list)
     p_k = X[1:, 0]
     v_k = X[1:, 1]
-    a_k = X[1:, 2]  # izbacujem prvi
+    a_k = X[1:, 2] # izbacujem prvi
 
     K = np.array(kf.K_list)
     Ppred = np.array(kf.Ppred_list)
@@ -184,16 +182,19 @@ if __name__ == '__main__':
     plt.ylabel('brzina')
     plt.xlabel('vrijeme ($sec$)')
 
+
     plt.subplot(3, 1, 3)
     plt.plot(t, p, '--')
     plt.plot(t, p_k)
     plt.plot(t, data)
     plt.ylabel('pozicija')
     plt.xlabel('vrijeme ($sec$)')
-    # if save_figures_tikz:
-    #     tikz_save('figures\estimiranaStanja.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\estimiranaStanja.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
+    # print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+
 
     plt.figure()
     # plt.subplot(3, 1, 1)
@@ -201,20 +202,20 @@ if __name__ == '__main__':
     plt.plot(t, a_k)
     plt.ylabel('ubrzanje')
     plt.xlabel('vrijeme ($sec$)')
-    # if save_figures_tikz:
-    #     tikz_save('figures\estimiranaUbrzanje.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\estimiranaUbrzanje.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
 
     plt.figure()
     plt.plot(t, v, '--')
     plt.plot(t, v_k)
     plt.ylabel('brzina')
     plt.xlabel('vrijeme ($sec$)')
-    # if save_figures_tikz:
-    #     tikz_save('figures\estimiranaBrzina.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\estimiranaBrzina.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
 
     plt.figure()
     plt.plot(t, p, '--')
@@ -222,10 +223,11 @@ if __name__ == '__main__':
     plt.plot(t, data)
     plt.ylabel('pozicija')
     plt.xlabel('vrijeme ($sec$)')
-    # if save_figures_tikz:
-    #     tikz_save('figures\estimiranaPozicija.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\estimiranaPozicija.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
+    print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
 
     # Kalmanovo pojacanje
     plt.figure()
@@ -234,10 +236,10 @@ if __name__ == '__main__':
     plt.plot(t, K[:, 2], label='ubrzanje')
     plt.xlabel('vrijeme ($sec$)')
     plt.legend()
-    # if save_figures_tikz:
-    #     tikz_save('figures\kalmanovoPojacanje.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\kalmanovoPojacanje.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
     plt.title('Kalmanovo pojačanje')
 
     # Varijansa predikcije P(k|k-1) = E{(x(k|k-1)-x(k))(x(k|k-1)-x(k))^T}
@@ -247,10 +249,10 @@ if __name__ == '__main__':
     plt.plot(t, Ppred[:, 2, 2], label='ubrzanje')
     plt.xlabel('vrijeme ($sec$)')
     plt.legend()
-    # if save_figures_tikz:
-    #     tikz_save('figures\covPredikcije.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\covPredikcije.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
     plt.title('Varijanse predikcije')
 
     # Varijansa korekcije P(k | k) = E{(x(k | k) - x(k))(x(k | k) - x(k)) ^ T}
@@ -260,8 +262,9 @@ if __name__ == '__main__':
     plt.plot(t, Pcor[:, 2, 2], label='ubrzanje')
     plt.xlabel('vrijeme ($sec$)')
     plt.legend()
-    # if save_figures_tikz:
-    #     tikz_save('figures\covKorekcije.tikz',
-    #               figureheight='\\figureheight',
-    #               figurewidth='\\figurewidth')
+    if save_figures_tikz:
+        tikz_save('figures\covKorekcije.tikz',
+                  figureheight='\\figureheight',
+                  figurewidth='\\figurewidth')
     plt.title('Varijanse korekcije')
+    plt.show()

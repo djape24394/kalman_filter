@@ -1,270 +1,210 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy.linalg as lin
-from tikzplotlib import save as tikz_save
+
 
 class KalmanFilter:
-    def __init__(self, A: np.ndarray, G: np.ndarray, C: np.ndarray, Q: np.ndarray, R: np.ndarray, x_0=None, P_0=None,
-                 save_history=True):
+    def __init__(self, F: np.ndarray, H: np.ndarray, Q: np.ndarray, R,
+                 save_history=False, dtype=np.float64):
         """
         Kalman filter imlementation, note that x will be 1D ndarray.
-            x[k] = Ax[k-1] + Gw[k-1]
-            y[k] = Cx[k] + v[k]
-        :param A: state transition matrix
-        :param G:
-        :param C:
-        :param Q: process noise covariance matrix(of variable w[k]). If it is scalar, you should pass scalar
-        :param R: measurement noise covariance matrix(of variable v[k]). If it is scalar, you should pass scalar
+            x[k] = Fx[k-1] + w[k-1]
+            y[k] = Hx[k] + v[k]
+        Inputs:
+        - F: state transition model
+        - H: measurement model
+        - Q: process noise covariance matrix(of variable w[k]).
+        - R: measurement noise covariance matrix(of variable v[k]).
         """
-        self.A = A
-        self.G = G
-        self.C = C
-        self.Q = Q
-        self.R = R
+        self.F = dtype(F)
+        self.H = dtype(H)
+        self.Q = dtype(Q)
+        self.R = dtype(R)
+        self.dtype = dtype
         self.save_history = save_history
 
-        # list of states with correction X(k|k)
-        self.Xcor_list = []
-        # current xcor
-        self.xcor = None
-        # list of prediction states X(k|k-1)
-        self.Xpred_list = []
-        # current xpred
-        self.xpred = None
-        # list of measurements y
-        self.Y = []
-        # Kalman gain K through iterations
-        self.K_list = []
-        # Kalman gain K
-        self.K = None
-        self.Ppred_list = []
-        self.Pcor_list = []
-        # P(k|k-1) = E{(x(k|k-1)-x(k))(x(k|k-1)-x(k))^T}
-        self.Ppred = None
-        # P(k | k) = E{(x(k | k) - x(k))(x(k | k) - x(k)) ^ T}
-        self.Pcor = None
-        # E{(y(k) - C*x(k|k-1))(y(k) - C*x(k|k-1)) ^ T}
-        self.S = None
-        self.S_list = []
-        # iteration number
-        self.iterarion = 0
-        self._initialization(x_0, P_0)
+    def prediction(self, x, P_cor):
+        """
+        Prediction step of the linear Kalman filter
+        """
+        x_pred = self.F @ x
+        P_pred = self.F @ P_cor @ self.F.T + self.Q
+        return x_pred, P_pred
 
-    def _initialization(self, x_0=None, P_0=None):
-        if x_0 is None:
-            self.xcor = np.zeros(self.A.shape[0])
+    def innovation(self, z, x_pred, P_pred):
+        """
+        Innovation
+        """
+        S = self.H @ P_pred @ self.H.T + self.R
+        residual = z - self.H @ x_pred
+        return residual, S
+
+    def correction(self, x_pred, P_pred, residual, S):
+        """
+        The correction step of the Kalman filter
+        """
+        if S is np.ndarray:
+            K = P_pred @ self.H.T @ np.linalg.inv(S)
         else:
-            self.xcor = x_0
+            K = P_pred @ self.H.T / S
+        x_cor = x_pred + K.dot(residual)
+        P_corr = (np.eye(x_pred.shape[0]) - np.outer(K, self.H)) @ P_pred
+        return x_cor, P_corr, K
+
+    def filter_data(self, Z, x_0=None, P_0=None):
+        if x_0 is None:
+            x_0 = np.zeros(self.F.shape[0], dtype=self.dtype)
 
         if P_0 is None:
-            self.Pcor = np.eye(self.A.shape[0])
+            P_0 = np.eye(self.F.shape[0], dtype=self.dtype)
+
+        x_corr_list = []
+        if self.save_history is True:
+            x_pred_history = []
+            P_pred_history = []
+            residual_history = []
+            S_history = []
+            P_corr_history = []
+            K_history = []
+        x_corr = x_0
+        P_corr = P_0
+        for z in Z:
+            x_pred, P_pred = self.prediction(x_corr, P_corr)
+            residual, S = self.innovation(z, x_pred, P_pred)
+            x_corr, P_corr, K = self.correction(x_pred, P_pred, residual, S)
+            x_corr_list.append(x_corr)
+            if self.save_history is True:
+                x_pred_history.append(x_pred)
+                P_pred_history.append(P_pred)
+                residual_history.append(residual)
+                S_history.append(S)
+                P_corr_history.append(P_corr)
+                K_history.append(K)
+        if self.save_history is False:
+            return x_corr_list, None
         else:
-            self.Pcor = P_0
-
-        # first element as x(0|0)
-        if self.save_history:
-            self.Xcor_list = []
-            self.Pcor_list = []
-            self.Xcor_list.append(self.xcor)
-            self.Pcor_list.append(self.Pcor)
-
-    def filter(self, y):
-        '''
-
-        :param y: measurement in current iteration, can be float number or 1D ndarray
-        :return:
-        '''
-        # prediction
-        self.xpred = self.A @ self.xcor
-        self.Ppred = self.A.dot(self.Pcor).dot(self.A.T) + self.G.dot(self.Q).dot(self.G.T)
-
-        # estimation
-        self.S = self.C.dot(self.Ppred).dot(self.C.T) + self.R
-        if self.S is not np.ndarray:
-            self.K = self.Ppred.dot(self.C.T) / self.S
-        else:
-            self.K = self.Ppred.dot(self.C.T).dot(lin.inv(self.S))
-        self.xcor = self.xpred + self.K.dot(y - self.C.dot(self.xpred))
-        self.Pcor = (np.eye(self.Ppred.shape[0]) - np.outer(self.K, self.C)).dot(self.Ppred)
-
-        self.iterarion += 1
-
-        if self.save_history:
-            # save iteration
-            self.Xpred_list.append(self.xpred)
-            self.Xcor_list.append(self.xcor)
-            self.Ppred_list.append(self.Ppred)
-            self.Pcor_list.append(self.Pcor)
-            self.S_list.append(self.S)
-            self.K_list.append(self.K)
-
-        return self.xpred, self.xcor, self.Ppred, self.Pcor, self.S
-
-    def filter_data(self, data):
-        for d in data:
-            self.filter(d)
-        return self.Xpred_list, self.Xcor_list, self.Ppred_list, self.Pcor_list, self.S_list
+            history = (x_pred_history, P_pred_history, residual_history, S_history, P_corr_history, K_history)
+            return x_corr_list, history
 
 
-if __name__ == '__main__':
-    save_figures_tikz = False
+if __name__ == "__main__":
+    # Sampling rate
     Ts = 0.1
+
+    #  Number of steps for which the observation will be generated
     n_samples = 100
-    # ubrzanje
-    a = np.zeros(n_samples)
+
+    # Generating Acceleration
+    a = np.zeros(n_samples, dtype=np.float64)
     a[:30] = 2
     a[30:60] = -3
-    # brzina i pozicija
-    v = np.zeros(n_samples)
-    p = np.zeros(n_samples)
-    for t in np.arange(1, n_samples):
-        v[t] = v[t - 1] + Ts * a[t]
-        p[t] = p[t - 1] + Ts * v[t] + Ts ** 2 * a[t] / 2
 
+    # Generating velocity and speed based on acceleration, measurement set used later is created exactly by these
+    # equations, and we reconstruct these states because of illustrations to make more clear the behavior of the filter
+    v = np.zeros(n_samples, dtype=np.float64)
+    v[0] = 0
+    s = np.zeros(n_samples, dtype=np.float64)
+    s[0] = 0
+    for i in range(1, n_samples):
+        v[i] = v[i - 1] + Ts * a[i]
+        s[i] = s[i - 1] + Ts * v[i] + 0.5 * Ts ** 2 * a[i]
+
+    # Read the data from the input file (data is created by adding additive noise to vector s created earlier)
     data = []
     with open('gps_data.txt', 'r') as f:
         for line in f.readlines():
             data.append(float(line))
 
     t = np.arange(0, 10, 0.1)
+
     plt.figure()
-    # plt.plot(t, a, label='ubrzanje $a$')
-    # plt.plot(t, v, label='brzina $v$')
-    # plt.plot(t, p, label='pozicija $s$')
-    # plt.plot(t, data, label='mjerenje $z$')
     plt.plot(t, a, label='$a$')
     plt.plot(t, v, label='$v$')
-    plt.plot(t, p, label='$s$')
+    plt.plot(t, s, label='$s$')
     plt.plot(t, data, label='$z$')
-    plt.xlabel('vrijeme ($sec$)')
+    plt.xlabel('time [$sec$]')
     plt.legend()
-    if save_figures_tikz:
-        tikz_save('figures\stanjaIMjerenja.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
+    plt.show()
 
-    # Kalman
-    # x = [p v a]
-    A = np.array([[1, Ts, Ts ** 2 / 2], [0, 1, Ts], [0, 0, 1]])
-    G = np.array([0, 0, 1]).reshape(3, 1)
-    # process noise
-    sigma_u = 3
-    Q = sigma_u  # np.array([sigma_u])
-    # measurement
-    C = np.array([1, 0, 0])
-    R = 1  # np.array([1])
-    x_0 = 0 * np.ones(3)
-    P_0 = 10 * np.eye(3)
+    # Transition model, assuming constant acceleration(which actually is constant acceleration)
+    F = np.array([[1, Ts, Ts ** 2 / 2], [0, 1, Ts], [0, 0, 1]])
+    # Measurement model
+    H = np.array([1, 0, 0])
+    # Process noise
+    sigma_w = 3
+    G = np.array([Ts ** 2 / 2, Ts, 1])
+    Q = np.outer(G, G) * sigma_w
 
-    kf = KalmanFilter(A, G, C, Q, R, x_0, P_0)
+    # Measurement noise
+    R = 1.0
 
-    kf.filter_data(data)
+    x_0 = np.zeros(3)
+    P_0 = np.eye(3)
 
-    X = np.array(kf.Xcor_list)
-    p_k = X[1:, 0]
-    v_k = X[1:, 1]
-    a_k = X[1:, 2] # izbacujem prvi
+    kalman_filter = KalmanFilter(F, H, Q, R, save_history=True)
 
-    K = np.array(kf.K_list)
-    Ppred = np.array(kf.Ppred_list)
-    Pcor = np.array(kf.Pcor_list[1:])  # izbacujem pocetni
+    x_corr_list, history = kalman_filter.filter_data(data, x_0, P_0)
+
+    # Plotting the state estimation results
+    X = np.array(x_corr_list)
+    s_k = X[:, 0]
+    v_k = X[:, 1]
+    a_k = X[:, 2]
 
     plt.figure()
     plt.subplot(3, 1, 1)
     plt.plot(t, a, '--')
     plt.plot(t, a_k)
-    plt.ylabel('ubrzanje')
-    plt.xlabel('vrijeme ($sec$)')
+    plt.ylabel('acceleration')
+    plt.xlabel('time [$sec$]')
 
     plt.subplot(3, 1, 2)
     plt.plot(t, v, '--')
     plt.plot(t, v_k)
-    plt.ylabel('brzina')
-    plt.xlabel('vrijeme ($sec$)')
-
+    plt.ylabel('speed')
+    plt.xlabel('time [$sec$]')
 
     plt.subplot(3, 1, 3)
-    plt.plot(t, p, '--')
-    plt.plot(t, p_k)
-    plt.plot(t, data)
-    plt.ylabel('pozicija')
-    plt.xlabel('vrijeme ($sec$)')
-    if save_figures_tikz:
-        tikz_save('figures\estimiranaStanja.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-    # print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    plt.plot(t, data, label='$z$')
+    plt.plot(t, s, '--', label='$s$')
+    plt.plot(t, s_k, label='S', color='r')
+    plt.ylabel('position')
+    plt.xlabel('time [$sec$]')
 
+    # Plotting the statistics and Kalman gain
+    x_pred_history, P_pred_history, residual_history, S_history, P_corr_history, K_history = history
 
+    # Plotting the residual with its standard deviations
+    resid = np.array(residual_history)
+    S = np.array(S_history)
+    stds = np.sqrt(S)
     plt.figure()
-    # plt.subplot(3, 1, 1)
-    plt.plot(t, a, '--')
-    plt.plot(t, a_k)
-    plt.ylabel('ubrzanje')
-    plt.xlabel('vrijeme ($sec$)')
-    if save_figures_tikz:
-        tikz_save('figures\estimiranaUbrzanje.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
+    plt.plot(t, stds, '--', color='k')
+    plt.plot(t, -stds, '--', color='k')
+    plt.plot(t, 2 * stds, '--', color='k')
+    plt.plot(t, -2 * stds, '--', color='k')
+    plt.plot(t, resid)
+    plt.ylabel('Innovation and innovation standard deviation bounds')
+    plt.xlabel('time [$sec$]')
 
+    # Plotting the Kalman gain
+    K = np.array(K_history)
     plt.figure()
-    plt.plot(t, v, '--')
-    plt.plot(t, v_k)
-    plt.ylabel('brzina')
-    plt.xlabel('vrijeme ($sec$)')
-    if save_figures_tikz:
-        tikz_save('figures\estimiranaBrzina.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-
-    plt.figure()
-    plt.plot(t, p, '--')
-    plt.plot(t, p_k)
-    plt.plot(t, data)
-    plt.ylabel('pozicija')
-    plt.xlabel('vrijeme ($sec$)')
-    if save_figures_tikz:
-        tikz_save('figures\estimiranaPozicija.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-    print('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
-
-    # Kalmanovo pojacanje
-    plt.figure()
-    plt.plot(t, K[:, 0], label='pozicija')
-    plt.plot(t, K[:, 1], label='brzina')
-    plt.plot(t, K[:, 2], label='ubrzanje')
-    plt.xlabel('vrijeme ($sec$)')
+    plt.plot(t, K[:, 0], label='s')
+    plt.plot(t, K[:, 1], label='v')
+    plt.plot(t, K[:, 2], label='a')
+    plt.ylabel('')
+    plt.xlabel('time [$sec$]')
+    plt.title('Kalman gains')
     plt.legend()
-    if save_figures_tikz:
-        tikz_save('figures\kalmanovoPojacanje.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-    plt.title('Kalmanovo pojačanje')
 
-    # Varijansa predikcije P(k|k-1) = E{(x(k|k-1)-x(k))(x(k|k-1)-x(k))^T}
+    # Plotting the variances from correction covariance matrix
+    P_corr = np.array(P_corr_history)
     plt.figure()
-    plt.plot(t, Ppred[:, 0, 0], label='pozicija')
-    plt.plot(t, Ppred[:, 1, 1], label='brzina')
-    plt.plot(t, Ppred[:, 2, 2], label='ubrzanje')
-    plt.xlabel('vrijeme ($sec$)')
+    plt.plot(t, P_corr[:, 0, 0], label='var{s}')
+    plt.plot(t, P_corr[:, 1, 1], label='var{v}')
+    plt.plot(t, P_corr[:, 2, 2], label='var{a}')
+    plt.ylabel('')
+    plt.xlabel('time [$sec$]')
+    plt.title('Variances of estimations')
     plt.legend()
-    if save_figures_tikz:
-        tikz_save('figures\covPredikcije.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-    plt.title('Varijanse predikcije')
-
-    # Varijansa korekcije P(k | k) = E{(x(k | k) - x(k))(x(k | k) - x(k)) ^ T}
-    plt.figure()
-    plt.plot(t, Pcor[:, 0, 0], label='pozicija')
-    plt.plot(t, Pcor[:, 1, 1], label='brzina')
-    plt.plot(t, Pcor[:, 2, 2], label='ubrzanje')
-    plt.xlabel('vrijeme ($sec$)')
-    plt.legend()
-    if save_figures_tikz:
-        tikz_save('figures\covKorekcije.tikz',
-                  figureheight='\\figureheight',
-                  figurewidth='\\figurewidth')
-    plt.title('Varijanse korekcije')
-    plt.show()
