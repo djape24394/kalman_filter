@@ -208,3 +208,4 @@ if __name__ == "__main__":
     plt.xlabel('time [$sec$]')
     plt.title('Variances of estimations')
     plt.legend()
+    plt.show()
