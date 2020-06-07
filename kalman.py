@@ -124,7 +124,7 @@ if __name__ == "__main__":
     plt.plot(t, data, label='$z$')
     plt.xlabel('time [$sec$]')
     plt.legend()
-    plt.show()
+    plt.grid(True)
 
     # Transition model, assuming constant acceleration(which actually is constant acceleration)
     F = np.array([[1, Ts, Ts ** 2 / 2], [0, 1, Ts], [0, 0, 1]])
@@ -197,6 +197,7 @@ if __name__ == "__main__":
     plt.xlabel('time [$sec$]')
     plt.title('Kalman gains')
     plt.legend()
+    plt.grid(True)
 
     # Plotting the variances from correction covariance matrix
     P_corr = np.array(P_corr_history)
@@ -208,4 +209,6 @@ if __name__ == "__main__":
     plt.xlabel('time [$sec$]')
     plt.title('Variances of estimations')
     plt.legend()
+    plt.grid(True)
     plt.show()
+
